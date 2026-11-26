@@ -1,36 +1,115 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# ArchFlow AI
+
+**ArchFlow AI** is an AI-powered System Design Dashboard & Motion-Graphics Flowchart Explainer Studio built with Next.js, `shadcn/ui`, Mermaid.js, and Firebase.
+
+Describe any project—full-stack web apps, mobile apps, backend/microservices, AI/ML pipelines, IoT/hardware systems, or business workflows—and generate complete architectures, every individual flow, interactive zoomable diagrams, and narrated explainer videos.
+
+---
+
+## Features
+
+- **Dashboard UI (`shadcn/ui`)**
+  - Collapsible sidebar navigation (**Overview**, **Design Studio**, **Saved Designs**, **AI Providers & Settings**)
+  - Dashboard Overview with KPI cards and recent cloud-saved architectures
+- **AI System Design Studio (`/studio`)**
+  - Supports any project type with configurable **Target Scale** and **Focus Area**
+  - Generates an **Overall System Architecture**, **Every Flow** (individual Mermaid flowcharts + step-by-step walkthroughs), **Components**, and **Tradeoffs**
+  - Multi-provider AI support: **Pollinations AI** (no key required), **Google Gemini 2.5 Flash**, **Groq Llama 3.3 70B**, and **OpenRouter Free Models**
+- **Interactive Zoomable Diagrams**
+  - Scroll to zoom (`40%`–`300%`), drag to pan, fullscreen modal view, animated data-flow arrows, step-by-step **Simulate** playback, Mermaid source view, copy, and SVG export
+- **AI Flowchart Explainer Video**
+  - Generates a scene-by-scene AI narration script (`/api/video`) covering every step
+  - Renders a `1280×720` motion-graphics presentation on HTML5 Canvas with per-node camera zoom & pan, glowing HUD brackets, data-packet trails, a live mini radar map, step checklist, kinetic subtitles, and audio equalizer bars
+  - Natural browser `speechSynthesis` AI voiceover synced to each step, playback speed (`0.75x`–`1.5x`), clickable step pills, persistent caching (**View Video**), and **Download Video (`.webm`)** export
+- **Firebase Authentication & Cloud Persistence**
+  - **Google Sign-In** and **Email & Password** login/registration
+  - Stores user profiles in Firestore `users/{uid}` and saved projects (including User ID and generated video storyboards) in Firestore `projects`
+  - Includes [firestore.rules](firestore.rules) for owner-scoped security
+
+---
+
+## Tech Stack
+
+- **Framework**: Next.js 16 (App Router), React 19, TypeScript
+- **UI**: Tailwind CSS v4, `shadcn/ui` (`base-nova`), Lucide Icons
+- **Diagrams & Video**: Mermaid.js, HTML5 Canvas (`captureStream` + `MediaRecorder`), Web Speech API (`speechSynthesis`)
+- **Backend & Cloud**: Next.js Route Handlers (`/api/design`, `/api/video`), Firebase Auth, Cloud Firestore, Firebase Analytics
+
+---
 
 ## Getting Started
 
-First, run the development server:
+### 1. Install Dependencies
+
+```bash
+npm install
+```
+
+### 2. Configure Environment Variables
+
+Copy `.env.example` to `.env.local` and fill in your Firebase web app config (and any optional AI provider keys):
+
+```env
+# Optional Free AI API Keys (Pollinations AI works with no key)
+GEMINI_API_KEY=
+GROQ_API_KEY=
+OPENROUTER_API_KEY=
+
+# Firebase Web App Configuration
+NEXT_PUBLIC_FIREBASE_API_KEY=
+NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=
+NEXT_PUBLIC_FIREBASE_PROJECT_ID=
+NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=
+NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=
+NEXT_PUBLIC_FIREBASE_APP_ID=
+NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID=
+```
+
+### 3. Configure Firebase
+
+1. In **Firebase Console → Authentication → Sign-in method**, enable **Email/Password** and **Google**.
+2. In **Firebase Console → Firestore Database → Rules**, paste the contents of [firestore.rules](firestore.rules) and click **Publish**.
+
+### 4. Run the Development Server
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000) in your browser.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+---
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Project Structure
 
-## Learn More
+```text
+app/
+├── api/
+│   ├── design/route.ts       # Multi-provider AI system design & flows API
+│   └── video/route.ts        # AI step-by-step video storyboard API
+├── components/
+│   ├── AppSidebar.tsx        # Dashboard sidebar navigation
+│   ├── AuthDialog.tsx        # Google & Email/Password login/register modal
+│   ├── AuthProvider.tsx      # Firebase Auth state & users collection sync
+│   ├── DashboardShell.tsx    # Top bar & sidebar layout shell
+│   ├── DesignProvider.tsx    # Cloud projects, video cache & provider settings
+│   ├── FlowVideoPlayer.tsx   # Motion-graphics Canvas video player & .webm exporter
+│   └── MermaidDiagram.tsx    # Zoomable, pannable & simulatable Mermaid viewer
+├── history/page.tsx          # Saved Designs table (cloud projects + User ID)
+├── settings/page.tsx         # AI Providers, API keys & studio defaults
+├── studio/page.tsx           # Project Prompt & interactive design canvas
+├── layout.tsx                # Root layout with providers
+└── page.tsx                  # Dashboard Overview
+lib/
+├── designs.ts                # Shared types, providers & chart hash helper
+└── firebase.ts               # Firebase App, Auth, Firestore & Analytics init
+firestore.rules               # Firestore security rules for users & projects
+```
 
-To learn more about Next.js, take a look at the following resources:
+---
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Scripts
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- `npm run dev` — Start development server
+- `npm run lint` — Run ESLint
+- `npx next build --webpack` — Production build
