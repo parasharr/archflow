@@ -75,6 +75,7 @@ export const PROVIDERS: {
   label: string;
   note: string;
   requiresKey: boolean;
+  defaultModel: string;
   description: string;
 }[] = [
   {
@@ -82,27 +83,47 @@ export const PROVIDERS: {
     label: "Pollinations AI",
     note: "Free • No API Key",
     requiresKey: false,
+    defaultModel: "openai",
     description: "Zero-setup free inference endpoint for rapid architecture prototyping.",
   },
   {
     id: "gemini",
-    label: "Google Gemini 2.5 Flash",
-    note: "Free Tier Key",
+    label: "Google Gemini",
+    note: "Free or Paid Key",
     requiresKey: true,
-    description: "Fast structured JSON generation with strong system-design reasoning.",
+    defaultModel: "gemini-2.5-flash",
+    description: "Fast structured JSON generation (e.g. gemini-2.5-flash or gemini-2.5-pro).",
+  },
+  {
+    id: "openai",
+    label: "OpenAI",
+    note: "Paid API Key",
+    requiresKey: true,
+    defaultModel: "gpt-4o-mini",
+    description: "Use your own OpenAI API key with gpt-4o-mini, gpt-4o, or gpt-4.1.",
   },
   {
     id: "groq",
-    label: "Groq Llama 3.3 70B",
-    note: "Free Tier Key",
+    label: "Groq",
+    note: "Free or Paid Key",
     requiresKey: true,
+    defaultModel: "llama-3.3-70b-versatile",
     description: "Ultra-low-latency LPU inference for instant diagram iterations.",
   },
   {
     id: "openrouter",
-    label: "OpenRouter Free Models",
-    note: "Free Tier Key",
+    label: "OpenRouter",
+    note: "Free or Paid Key",
     requiresKey: true,
-    description: "Unified gateway to free open-weight models via OpenRouter.",
+    defaultModel: "meta-llama/llama-3.3-70b-instruct:free",
+    description: "Unified gateway to free or paid models (Claude, GPT, Llama, DeepSeek).",
+  },
+  {
+    id: "custom",
+    label: "Custom / BYOK Endpoint",
+    note: "Your Own API Setup",
+    requiresKey: true,
+    defaultModel: "",
+    description: "Connect any OpenAI-compatible paid or self-hosted endpoint with your own key.",
   },
 ];

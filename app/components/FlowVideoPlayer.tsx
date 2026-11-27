@@ -173,8 +173,14 @@ export function FlowVideoPlayer({
   steps = [],
   onVideoReady,
 }: FlowVideoPlayerProps) {
-  const { provider, apiKeys, getVideoStoryboard, saveVideoStoryboard } =
-    useDesigns();
+  const {
+    provider,
+    apiKeys,
+    customModels,
+    customEndpoint,
+    getVideoStoryboard,
+    saveVideoStoryboard,
+  } = useDesigns();
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -280,6 +286,8 @@ export function FlowVideoPlayer({
                 steps,
                 provider,
                 apiKey: apiKeys[provider] ?? "",
+                customEndpoint,
+                customModel: customModels[provider],
               }),
             }).then(async (res) => {
               const data = await res.json();
@@ -358,6 +366,8 @@ export function FlowVideoPlayer({
     steps,
     provider,
     apiKeys,
+    customModels,
+    customEndpoint,
     storyboard,
     diagramImg,
     getVideoStoryboard,

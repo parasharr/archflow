@@ -5,6 +5,7 @@ import React, {
   useCallback,
   useContext,
   useEffect,
+  useRef,
   useState,
 } from "react";
 import type { User } from "firebase/auth";
@@ -13,9 +14,11 @@ import {
   collection,
   deleteDoc,
   doc,
+  getDoc,
   getDocs,
   query,
   serverTimestamp,
+  setDoc,
   updateDoc,
   where,
 } from "firebase/firestore";
@@ -52,6 +55,10 @@ interface DesignContextValue {
   setProvider: (provider: AiProvider) => void;
   apiKeys: Partial<Record<AiProvider, string>>;
   setApiKeyForProvider: (provider: AiProvider, key: string) => void;
+  customModels: Partial<Record<AiProvider, string>>;
+  setCustomModelForProvider: (provider: AiProvider, model: string) => void;
+  customEndpoint: string;
+  setCustomEndpoint: (endpoint: string) => void;
   defaultScale: string;
   setDefaultScale: (scale: string) => void;
   defaultFocus: string;
@@ -61,6 +68,8 @@ interface DesignContextValue {
 const STORAGE_KEYS = {
   provider: "archflow_provider_v1",
   apiKeys: "archflow_api_keys_v1",
+  customModels: "archflow_custom_models_v1",
+  customEndpoint: "archflow_custom_endpoint_v1",
   scale: "archflow_default_scale_v2",
   focus: "archflow_default_focus_v2",
   videos: "archflow_video_cache_v1",
@@ -78,10 +87,15 @@ export function DesignProvider({ children }: { children: React.ReactNode }) {
   );
   const [provider, setProviderState] = useState<AiProvider>("pollinations");
   const [apiKeys, setApiKeys] = useState<Partial<Record<AiProvider, string>>>({});
+  const [customModels, setCustomModels] = useState<
+    Partial<Record<AiProvider, string>>
+  >({});
+  const [customEndpoint, setCustomEndpointState] = useState<string>("");
   const [defaultScale, setDefaultScaleState] = useState("Growth (1M Users)");
   const [defaultFocus, setDefaultFocusState] = useState(
     "End-to-End Architecture"
   );
+  const settingsSyncTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     void initFirebaseAnalytics();
@@ -96,6 +110,12 @@ export function DesignProvider({ children }: { children: React.ReactNode }) {
 
         const savedKeys = localStorage.getItem(STORAGE_KEYS.apiKeys);
         if (savedKeys) setApiKeys(JSON.parse(savedKeys));
+
+        const savedModels = localStorage.getItem(STORAGE_KEYS.customModels);
+        if (savedModels) setCustomModels(JSON.parse(savedModels));
+
+        const savedEndpoint = localStorage.getItem(STORAGE_KEYS.customEndpoint);
+        if (savedEndpoint) setCustomEndpointState(savedEndpoint);
 
         const savedScale = localStorage.getItem(STORAGE_KEYS.scale);
         if (savedScale) setDefaultScaleState(savedScale);
@@ -114,7 +134,7 @@ export function DesignProvider({ children }: { children: React.ReactNode }) {
     return () => window.clearTimeout(id);
   }, []);
 
-  // Load user's saved projects from Firestore "projects" collection when logged in
+  // Load user's saved projects and connected API settings from Firestore when logged in
   useEffect(() => {
     if (!user || !firebaseDb) {
       const clearId = window.setTimeout(() => {
@@ -124,18 +144,87 @@ export function DesignProvider({ children }: { children: React.ReactNode }) {
       return () => window.clearTimeout(clearId);
     }
     const db = firebaseDb;
+    const uid = user.uid;
     let cancelled = false;
 
-    async function fetchCloudProjects() {
+    async function fetchCloudData() {
       try {
-        const q = query(
-          collection(db, "projects"),
-          where("userId", "==", user!.uid)
-        );
-        const snap = await getDocs(q);
+        const [projectsSnap, userSnap] = await Promise.all([
+          getDocs(query(collection(db, "projects"), where("userId", "==", uid))),
+          getDoc(doc(db, "users", uid)),
+        ]);
         if (cancelled) return;
 
-        const cloudList: SavedDesign[] = snap.docs.map((d) => {
+        // Hydrate connected API settings from users/{uid}
+        if (userSnap.exists()) {
+          const userData = userSnap.data();
+          const apiSettings = userData?.apiSettings as
+            | {
+                provider?: AiProvider;
+                apiKeys?: Partial<Record<AiProvider, string>>;
+                customModels?: Partial<Record<AiProvider, string>>;
+                customEndpoint?: string;
+                defaultScale?: string;
+                defaultFocus?: string;
+              }
+            | undefined;
+
+          if (apiSettings) {
+            if (apiSettings.provider) {
+              setProviderState(apiSettings.provider);
+              try {
+                localStorage.setItem(STORAGE_KEYS.provider, apiSettings.provider);
+              } catch {}
+            }
+            if (apiSettings.apiKeys) {
+              setApiKeys(apiSettings.apiKeys);
+              try {
+                localStorage.setItem(
+                  STORAGE_KEYS.apiKeys,
+                  JSON.stringify(apiSettings.apiKeys)
+                );
+              } catch {}
+            }
+            if (apiSettings.customModels) {
+              setCustomModels(apiSettings.customModels);
+              try {
+                localStorage.setItem(
+                  STORAGE_KEYS.customModels,
+                  JSON.stringify(apiSettings.customModels)
+                );
+              } catch {}
+            }
+            if (typeof apiSettings.customEndpoint === "string") {
+              setCustomEndpointState(apiSettings.customEndpoint);
+              try {
+                localStorage.setItem(
+                  STORAGE_KEYS.customEndpoint,
+                  apiSettings.customEndpoint
+                );
+              } catch {}
+            }
+            if (apiSettings.defaultScale) {
+              setDefaultScaleState(apiSettings.defaultScale);
+              try {
+                localStorage.setItem(
+                  STORAGE_KEYS.scale,
+                  apiSettings.defaultScale
+                );
+              } catch {}
+            }
+            if (apiSettings.defaultFocus) {
+              setDefaultFocusState(apiSettings.defaultFocus);
+              try {
+                localStorage.setItem(
+                  STORAGE_KEYS.focus,
+                  apiSettings.defaultFocus
+                );
+              } catch {}
+            }
+          }
+        }
+
+        const cloudList: SavedDesign[] = projectsSnap.docs.map((d) => {
           const data = d.data();
           const created =
             data.createdAt && typeof data.createdAt.toDate === "function"
@@ -143,7 +232,7 @@ export function DesignProvider({ children }: { children: React.ReactNode }) {
               : new Date().toISOString();
           return {
             id: d.id,
-            userId: String(data.userId ?? user!.uid),
+            userId: String(data.userId ?? uid),
             userEmail:
               typeof data.userEmail === "string" ? data.userEmail : undefined,
             savedToCloud: true,
@@ -181,17 +270,56 @@ export function DesignProvider({ children }: { children: React.ReactNode }) {
       }
     }
 
-    void fetchCloudProjects();
+    void fetchCloudData();
     return () => {
       cancelled = true;
     };
   }, [user]);
+
+  const scheduleCloudSettingsSync = useCallback(
+    (overrides: {
+      provider?: AiProvider;
+      apiKeys?: Partial<Record<AiProvider, string>>;
+      customModels?: Partial<Record<AiProvider, string>>;
+      customEndpoint?: string;
+      defaultScale?: string;
+      defaultFocus?: string;
+    }) => {
+      if (!user || !firebaseDb) return;
+      const db = firebaseDb;
+      const uid = user.uid;
+      if (settingsSyncTimerRef.current) {
+        window.clearTimeout(settingsSyncTimerRef.current);
+      }
+      const payload = {
+        provider: overrides.provider ?? provider,
+        apiKeys: overrides.apiKeys ?? apiKeys,
+        customModels: overrides.customModels ?? customModels,
+        customEndpoint: overrides.customEndpoint ?? customEndpoint,
+        defaultScale: overrides.defaultScale ?? defaultScale,
+        defaultFocus: overrides.defaultFocus ?? defaultFocus,
+      };
+      settingsSyncTimerRef.current = window.setTimeout(() => {
+        void setDoc(
+          doc(db, "users", uid),
+          {
+            uid,
+            apiSettings: payload,
+            updatedAt: serverTimestamp(),
+          },
+          { merge: true }
+        ).catch(() => {});
+      }, 350);
+    },
+    [user, provider, apiKeys, customModels, customEndpoint, defaultScale, defaultFocus]
+  );
 
   const setProvider = (next: AiProvider) => {
     setProviderState(next);
     try {
       localStorage.setItem(STORAGE_KEYS.provider, next);
     } catch {}
+    scheduleCloudSettingsSync({ provider: next });
   };
 
   const setApiKeyForProvider = (target: AiProvider, key: string) => {
@@ -200,8 +328,28 @@ export function DesignProvider({ children }: { children: React.ReactNode }) {
       try {
         localStorage.setItem(STORAGE_KEYS.apiKeys, JSON.stringify(updated));
       } catch {}
+      scheduleCloudSettingsSync({ apiKeys: updated });
       return updated;
     });
+  };
+
+  const setCustomModelForProvider = (target: AiProvider, model: string) => {
+    setCustomModels((prev) => {
+      const updated = { ...prev, [target]: model };
+      try {
+        localStorage.setItem(STORAGE_KEYS.customModels, JSON.stringify(updated));
+      } catch {}
+      scheduleCloudSettingsSync({ customModels: updated });
+      return updated;
+    });
+  };
+
+  const setCustomEndpoint = (next: string) => {
+    setCustomEndpointState(next);
+    try {
+      localStorage.setItem(STORAGE_KEYS.customEndpoint, next);
+    } catch {}
+    scheduleCloudSettingsSync({ customEndpoint: next });
   };
 
   const setDefaultScale = (next: string) => {
@@ -209,6 +357,7 @@ export function DesignProvider({ children }: { children: React.ReactNode }) {
     try {
       localStorage.setItem(STORAGE_KEYS.scale, next);
     } catch {}
+    scheduleCloudSettingsSync({ defaultScale: next });
   };
 
   const setDefaultFocus = (next: string) => {
@@ -216,6 +365,7 @@ export function DesignProvider({ children }: { children: React.ReactNode }) {
     try {
       localStorage.setItem(STORAGE_KEYS.focus, next);
     } catch {}
+    scheduleCloudSettingsSync({ defaultFocus: next });
   };
 
   const saveProjectToCloud = useCallback(
@@ -341,6 +491,10 @@ export function DesignProvider({ children }: { children: React.ReactNode }) {
         setProvider,
         apiKeys,
         setApiKeyForProvider,
+        customModels,
+        setCustomModelForProvider,
+        customEndpoint,
+        setCustomEndpoint,
         defaultScale,
         setDefaultScale,
         defaultFocus,

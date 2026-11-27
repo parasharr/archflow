@@ -9,6 +9,8 @@ interface VideoRequestBody {
   steps?: string[];
   provider?: AiProvider;
   apiKey?: string;
+  customEndpoint?: string;
+  customModel?: string;
 }
 
 export interface VideoScene {
@@ -154,10 +156,11 @@ export async function POST(req: NextRequest) {
           { status: 400 }
         );
       }
+      const model = body.customModel?.trim() || "gemini-2.5-flash";
       const res = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(
-          key
-        )}`,
+        `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
+          model
+        )}:generateContent?key=${encodeURIComponent(key)}`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -174,30 +177,65 @@ export async function POST(req: NextRequest) {
       if (!res.ok) throw new Error(`Gemini API error (${res.status})`);
       const data = await res.json();
       rawText = data.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
-    } else if (provider === "groq" || provider === "openrouter") {
-      const isGroq = provider === "groq";
+    } else if (
+      provider === "openai" ||
+      provider === "custom" ||
+      provider === "groq" ||
+      provider === "openrouter"
+    ) {
+      const endpoint =
+        provider === "custom"
+          ? body.customEndpoint?.trim() ?? ""
+          : provider === "openai"
+          ? "https://api.openai.com/v1/chat/completions"
+          : provider === "groq"
+          ? "https://api.groq.com/openai/v1/chat/completions"
+          : "https://openrouter.ai/api/v1/chat/completions";
+
+      const defaultModel =
+        provider === "openai"
+          ? "gpt-4o-mini"
+          : provider === "groq"
+          ? "llama-3.3-70b-versatile"
+          : provider === "openrouter"
+          ? "meta-llama/llama-3.3-70b-instruct:free"
+          : "";
+
+      const model = body.customModel?.trim() || defaultModel;
       const key =
         body.apiKey?.trim() ||
-        (isGroq ? process.env.GROQ_API_KEY : process.env.OPENROUTER_API_KEY);
-      if (!key) {
+        (provider === "openai"
+          ? process.env.OPENAI_API_KEY
+          : provider === "groq"
+          ? process.env.GROQ_API_KEY
+          : provider === "openrouter"
+          ? process.env.OPENROUTER_API_KEY
+          : "") ||
+        "";
+
+      if (!endpoint || !model) {
+        return NextResponse.json(
+          { error: "Missing Custom Endpoint URL or Model ID." },
+          { status: 400 }
+        );
+      }
+      if (provider !== "custom" && !key) {
         return NextResponse.json(
           { error: `Missing ${provider} API key.` },
           { status: 400 }
         );
       }
-      const endpoint = isGroq
-        ? "https://api.groq.com/openai/v1/chat/completions"
-        : "https://openrouter.ai/api/v1/chat/completions";
-      const model = isGroq
-        ? "llama-3.3-70b-versatile"
-        : "meta-llama/llama-3.3-70b-instruct:free";
+
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+      };
+      if (key) {
+        headers.Authorization = `Bearer ${key}`;
+      }
 
       const res = await fetch(endpoint, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${key}`,
-        },
+        headers,
         body: JSON.stringify({
           model,
           messages: [

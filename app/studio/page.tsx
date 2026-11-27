@@ -70,6 +70,8 @@ function StudioForm({ designIdParam }: { designIdParam: string | null }) {
     setProvider,
     apiKeys,
     setApiKeyForProvider,
+    customModels,
+    customEndpoint,
     defaultScale,
     defaultFocus,
   } = useDesigns();
@@ -105,6 +107,15 @@ function StudioForm({ designIdParam }: { designIdParam: string | null }) {
   );
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState("diagram");
+
+  const availableProviders = PROVIDERS.filter((p) => {
+    if (p.id === provider) return true;
+    if (!p.requiresKey) return true;
+    if (p.id === "custom") {
+      return Boolean(customEndpoint.trim() && customModels.custom?.trim());
+    }
+    return Boolean(apiKeys[p.id]?.trim());
+  });
 
   const currentProviderMeta = PROVIDERS.find((p) => p.id === provider);
   const currentApiKey = apiKeys[provider] ?? "";
@@ -167,6 +178,8 @@ function StudioForm({ designIdParam }: { designIdParam: string | null }) {
           focus,
           provider,
           apiKey: currentApiKey,
+          customEndpoint,
+          customModel: customModels[provider],
         }),
       });
 
@@ -194,7 +207,7 @@ function StudioForm({ designIdParam }: { designIdParam: string | null }) {
   return (
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
       {/* Left Control Panel */}
-      <section className="lg:col-span-4 space-y-6 lg:sticky lg:top-20 lg:self-start">
+      <section className="lg:col-span-4 space-y-6 lg:sticky lg:top-20 lg:self-start lg:max-h-[calc(100vh-5.5rem)] lg:overflow-y-auto">
         <Card>
           <CardHeader>
             <div className="flex items-center justify-between gap-2">
@@ -282,7 +295,7 @@ function StudioForm({ designIdParam }: { designIdParam: string | null }) {
                     <SelectValue placeholder="Select provider" />
                   </SelectTrigger>
                   <SelectContent>
-                    {PROVIDERS.map((p) => (
+                    {availableProviders.map((p) => (
                       <SelectItem key={p.id} value={p.id}>
                         {p.label} ({p.note})
                       </SelectItem>

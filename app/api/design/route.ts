@@ -1,7 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { jsonrepair } from "jsonrepair";
 
-export type AiProvider = "pollinations" | "gemini" | "groq" | "openrouter";
+export type AiProvider =
+  | "pollinations"
+  | "gemini"
+  | "groq"
+  | "openrouter"
+  | "openai"
+  | "custom";
 
 interface DesignRequestBody {
   prompt: string;
@@ -9,6 +15,8 @@ interface DesignRequestBody {
   focus?: string;
   provider?: AiProvider;
   apiKey?: string;
+  customEndpoint?: string;
+  customModel?: string;
 }
 
 const SYSTEM_PROMPT = `You are a Principal Systems Architect who explains architectures in clear, simple, easy-to-understand language.
@@ -134,8 +142,14 @@ async function callPollinations(userPrompt: string): Promise<string> {
   return data.choices?.[0]?.message?.content ?? "";
 }
 
-async function callGemini(userPrompt: string, apiKey: string): Promise<string> {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(apiKey)}`;
+async function callGemini(
+  userPrompt: string,
+  apiKey: string,
+  model = "gemini-2.5-flash"
+): Promise<string> {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
+    model
+  )}:generateContent?key=${encodeURIComponent(apiKey)}`;
   const res = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -214,22 +228,51 @@ export async function POST(req: NextRequest) {
       const key = body.apiKey?.trim() || process.env.GEMINI_API_KEY;
       if (!key) {
         return NextResponse.json(
-          { error: "Missing Gemini API key. Add GEMINI_API_KEY in .env.local or paste a free key in AI Settings." },
+          { error: "Missing Gemini API key. Add GEMINI_API_KEY in .env.local or paste your key in AI Settings." },
           { status: 400 }
         );
       }
-      rawText = await callGemini(userPrompt, key);
+      rawText = await callGemini(
+        userPrompt,
+        key,
+        body.customModel?.trim() || "gemini-2.5-flash"
+      );
+    } else if (provider === "openai") {
+      const key = body.apiKey?.trim() || process.env.OPENAI_API_KEY;
+      if (!key) {
+        return NextResponse.json(
+          { error: "Missing OpenAI API key. Paste your paid OpenAI key in AI Settings." },
+          { status: 400 }
+        );
+      }
+      rawText = await callOpenAICompatible(
+        "https://api.openai.com/v1/chat/completions",
+        body.customModel?.trim() || "gpt-4o-mini",
+        userPrompt,
+        key
+      );
+    } else if (provider === "custom") {
+      const endpoint = body.customEndpoint?.trim();
+      const model = body.customModel?.trim();
+      const key = body.apiKey?.trim() || "";
+      if (!endpoint || !model) {
+        return NextResponse.json(
+          { error: "Missing Custom Endpoint URL or Model ID. Configure them in AI Settings." },
+          { status: 400 }
+        );
+      }
+      rawText = await callOpenAICompatible(endpoint, model, userPrompt, key);
     } else if (provider === "groq") {
       const key = body.apiKey?.trim() || process.env.GROQ_API_KEY;
       if (!key) {
         return NextResponse.json(
-          { error: "Missing Groq API key. Add GROQ_API_KEY in .env.local or paste a free key in AI Settings." },
+          { error: "Missing Groq API key. Add GROQ_API_KEY in .env.local or paste your key in AI Settings." },
           { status: 400 }
         );
       }
       rawText = await callOpenAICompatible(
         "https://api.groq.com/openai/v1/chat/completions",
-        "llama-3.3-70b-versatile",
+        body.customModel?.trim() || "llama-3.3-70b-versatile",
         userPrompt,
         key
       );
@@ -237,13 +280,13 @@ export async function POST(req: NextRequest) {
       const key = body.apiKey?.trim() || process.env.OPENROUTER_API_KEY;
       if (!key) {
         return NextResponse.json(
-          { error: "Missing OpenRouter API key. Add OPENROUTER_API_KEY in .env.local or paste a free key in AI Settings." },
+          { error: "Missing OpenRouter API key. Add OPENROUTER_API_KEY in .env.local or paste your key in AI Settings." },
           { status: 400 }
         );
       }
       rawText = await callOpenAICompatible(
         "https://openrouter.ai/api/v1/chat/completions",
-        "meta-llama/llama-3.3-70b-instruct:free",
+        body.customModel?.trim() || "meta-llama/llama-3.3-70b-instruct:free",
         userPrompt,
         key,
         { "HTTP-Referer": "http://localhost:3000", "X-Title": "ArchFlow AI" }
